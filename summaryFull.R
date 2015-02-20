@@ -49,9 +49,9 @@
 
         for (j in 1:length(table(data[,i]))){
 
-          a[[v + j]] <- paste("\\multicolumn{1}{r}{",
+          a[[v + j]] <- paste("\\multicolumn{1}{r}{\\textit{",
                               levels(data[, i])[j],
-                              "} &   & ",
+                              "}} &   & ",
                               round(table(data[, i])[j] / sum(table(data[, i])), 2),
                               "(",
                               table(data[, i])[j],
