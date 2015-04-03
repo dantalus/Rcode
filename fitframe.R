@@ -58,6 +58,7 @@ fitPlot <- function(data) {
                             legend.title = element_blank()))
             }
   
+  
   entPlot <- function(data) {
     
                require(ggplot2)
