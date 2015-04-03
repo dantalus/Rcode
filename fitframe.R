@@ -55,7 +55,7 @@ fitPlot <- function(data) {
                             strip.background = element_blank(),
                             panel.grid.minor = element_blank(),
                             legend.position = "bottom", 
-                            legend.title = element_blank()))
+                            legend.title = element_blank())
             }
   
   
@@ -74,5 +74,5 @@ fitPlot <- function(data) {
                         theme(text = element_text (color = "black"), 
                               panel.grid.minor = element_blank())
                               legend.position = "bottom", 
-                              legend.title = element_blank()))
+                              legend.title = element_blank())
              }
