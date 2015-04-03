@@ -71,7 +71,7 @@ fitPlot <- function(data) {
                         xlab("Number of Profiles in the Model") +
                         scale_x_continuous(breaks = c(2:5)) +   
                         scale_y_continuous(limits = c(0.5, 1), breaks = seq(0.5, 1, .05)) + 
-                        theme(text = element_text (color = "black"), 
+                        theme(text = element_text(color = "black"), 
                               panel.grid.minor = element_blank(),
                               legend.position = "bottom", 
                               legend.title = element_blank())
