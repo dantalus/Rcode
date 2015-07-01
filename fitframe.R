@@ -45,7 +45,7 @@ fitPlot <- function(data) {
                require(ggplot2)
     
                return(ggplot(subset(data, model > 0 & stat < 4), 
-                             aes(x = model, y = value, shape = stat2)) +                
+                             aes(x = model, y = value, shape = stat2, color = stat2)) +                
                       geom_point(size = 4) +                               
                       geom_line() +                                        
                       ylab("AIC/BIC/aBIC") +
