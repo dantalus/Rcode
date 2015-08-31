@@ -69,6 +69,6 @@
     }
 
 
-    do.call(rbind, a)
+    return(do.call(rbind, a))
 
   }
