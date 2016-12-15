@@ -1,0 +1,334 @@
+# Review
+
+# object <- function(object)
+
+# All of R is about understanding objects and functions.
+
+#
+
+# Objects are made up of 5 data structures:
+# vectors, matrices, arrays - can only contain 1 type of information
+# lists, and dataframes - can hold different types of information
+
+# These structures can hold types information characterised as:
+# logical, character, integer, numeric/double
+# NA (NaN, Inf)
+
+# There are many functions to help us better understand objects
+
+  class()
+  typeof()
+  str()
+  View()
+
+  names()
+  attributes()
+  dims()
+  length()
+  nrow()
+
+  is.character()
+  is.numeric()
+  is.factor()
+  is.logical()
+
+
+# Subsetting
+
+# Part of working with R is being table to take apart objects and rearrange the
+# parts.
+
+# Indexing
+
+# One-dimension
+  vec <- sample(c(0:9), 100, replace = TRUE)
+  vec[2]
+
+# Two dimensions
+  mat <- matrix(c(1, 2, 3, 3, 2, 1), ncol = 2)
+  matrix[1, 2]
+
+# Lists
+  x <- list(a = c(1, 2), b = c(4, 4), c = c(6, 8), d = c(9, 11))
+
+  x[[1]]
+  x[[1]][1]
+  x[1]
+
+# These give different results
+  class(x[[1]])
+  str(x[[1]])
+
+  class(x[1])
+  str(x[1])
+  attributes(x[1])
+
+# $ for named elements in a list
+  x$a
+  class(x$a)
+  x$a[1]
+
+
+# Selecting multiple elements
+  x <- letters
+  x[c(1, 2, 6)]
+
+  x <- sample(c(0:9), 100, replace = TRUE)
+  x[x < 5]
+  x < 5
+
+  d <- data_frame(number    = sample(0:9, 100, replace = TRUE),
+                  character = rep(c("a", "b"), 50))
+
+  lapply(d, class)
+
+  d[unlist(lapply(d, is.numeric))] %>% head()
+  d[       sapply(d, is.numeric)]  %>% head()
+
+# You can name elements in data structures besides lists.
+  x <- c(    1,     4,     6,     9)
+  str(x)
+  x <- c(a = 1, b = 4, c = 6, d = 9)
+  str(x)
+  names(x)
+  attributes(x)
+  attr(x, "description") <- "This is a named vector"
+  attributes(x)
+
+# But $ only works with lists
+  x$a
+  x <- list(a = 1, b = 4, c = 6, d = 9)
+  x$a
+
+
+# Combining objects can be tricky.
+
+# Differnt data types willl typically reduce to the type with the lowest level
+# of information
+
+  x <- c(1, "character")
+  x
+  class(x)
+
+  x <- c(1, TRUE, "character")
+  x
+  class(x)
+
+  x <- c(1, TRUE, FALSE)
+  x
+  class(x)
+
+# Vectors can be combined to make matrices, but be careful
+  m <- rbind(sample(0:9, 100, replace = TRUE),
+             c("a", "b"))
+  class(m)
+  View(m)
+
+# Dataframes will prevent you from doing this
+
+  m <- rbind(sample(0:9, 100, replace = TRUE),
+             c("a", "b")) %>% as.data.frame() # Not this way
+
+  m <- data_frame(sample(0:9, 100, replace = TRUE),
+                  c("a", "b"))
+
+
+# There are other functions to help switch between information types
+  as.character()
+  as.numeric()
+  as.factor()
+
+# Factors
+
+# Factors are a special kind of numeric variable with labels attached to each
+# value, signifying categorical (nominal, ordered) data.
+
+  f <- sample(c("Yes", "No", "Maybe"), size = 100, replace = TRUE,
+              prob = c(0.3, 0.6, 0.1))
+
+  f.1 <- factor(f)
+
+# The "levels" are the labels
+
+  levels(f.1)
+  table(f.1)
+
+# Confirm the structure
+  str(f.1)
+
+# The underlying numbers:
+  table(as.numeric(f.1))
+
+# The order of the levels matters. By default, they will be in alphabetial order
+  sample(letters[c(1, 5, 8)], size = 100, replace = TRUE) %>%
+    factor() %>%
+    levels()
+
+  sample(letters[c(5, 8, 1)], size = 100, replace = TRUE) %>%
+    factor() %>%
+    class()
+
+  sample(letters[c(5, 8, 1)], size = 100, replace = TRUE) %>%
+    factor(levels = c("e", "h", "a"))
+
+  sample(letters[c(5, 8, 1)], size = 100, replace = TRUE) %>%
+    factor(levels = c("e", "h", "a"), ordered = TRUE) %>%
+    class()
+
+  sample(c(1, 2, 10, 20, 100), size = 100, replace = TRUE) %>%
+    factor() %>%
+    class()
+
+  sample(as.character(c(1, 2, 10, 20, 100)), size = 100, replace = TRUE) %>%
+    factor() %>%
+    class()
+
+# Reordering levels
+  levels(f.1) <- c("Yes", "No", "Maybe")
+  table(f.1) # Bad!
+
+  levels(f.1) <- rev(levels(f.1)) # Switch it back
+  table(f.1)
+
+# Do it with factor()
+  f.1 <- factor(f, levels = rev(levels(f.1)))
+  table(f.1) # Correct
+
+  f.1 <- relevel(f.1, ref = "Maybe")
+  table(f.1)
+
+  table(as.numeric(f.1)) # Convert to the underlying number
+
+# Do it manually
+  f.1 <- factor(f, levels = c("Maybe", "Yes", "No"))
+
+  table(f.1) # Correct
+
+# You need to use the exising levels
+  f.1 <- factor(f, levels = c("A", "B", "C")) # Bad
+
+  f.1 <- factor(f)
+  f.2 <- factor(f, labels = c("A", "B", "C")) # Use the labels option
+
+  table(f.1, f.2)
+
+  levels(f.2) # The labels become the levels forevermore
+
+# Numbers as factors
+
+  f <- sample(c(10, 20, 50, 60, 65, 90), size = 100, replace = TRUE)
+
+  f.1 <- factor(f)
+  levels(f.1)
+  str(f.1)
+  f.1 %>% as.numeric() %>% table() # No
+
+  as.numeric(levels(f.1)[f.1]) %>% table() # Yes
+
+  f.1 <- cut(f, 4) # Equally spaced levels
+  table(f.1)
+  str(f.1)
+
+  f.1 <- cut(f, 4, labels = c("Low", "Med", "High", "Very High"))
+  table(f.1)
+  levels(f.1)
+  as.character(f.1)
+
+# ~ equally sized levels
+  f.1 <- cut(f, breaks = quantile(f, 0:4/4))
+  table(f.1)
+  levels(f.1)
+
+# User defined cuts
+  bmi <- rnorm(100, 26, 4)
+
+  qplot(bmi)
+
+  bmi <- cut(bmi, c(0, 18.5, 25, 30, max(bmi)),
+             labels = c("UW", "NW", "OW", "OB"))
+
+  table(bmi)
+
+# Reordering levels based on other values
+
+  data <- data_frame(number = rnorm(100, 0, 1),
+                     factor = factor(sample(letters[1:5], 100, replace = TRUE)))
+
+
+  levels(data$factor)
+
+  data <- group_by(data, factor) %>%
+          summarise(mean = mean(number)) %>%
+          full_join(data, by = "factor")
+
+  table(data$factor, data$mean)
+
+  ggplot(data, aes(x = factor, fill = mean)) +
+    geom_bar()
+
+  data$factor <- reorder(data$factor, data$mean)
+
+  levels(data$factor)
+
+  ggplot(data, aes(x = factor, fill = mean)) +
+    geom_bar()
+
+  data <- group_by(data, factor) %>%
+          summarise(count = n()) %>%
+          full_join(data, by = "factor")
+
+  data$factor <- reorder(data$factor, data$count)
+
+  ggplot(data, aes(x = factor, fill = mean)) +
+    geom_bar()
+
+
+# Creating/Manipulating vectors (or variables)
+
+
+  paste( "text", "more text", "even more",   sep = "  x  ")
+  paste0("text", "more text", "even more") # sep = ""
+
+  rep(c(1, 2, 3), times = 100)
+  rep(c(1, 2, 3), each  = 3)
+
+  c(1:10)
+  seq(1:10)
+  seq(from = 1, to = 100, by = 2)
+  seq(from = 1, to = 100, length.out = 10)
+
+  x <- letters[3:21]
+  seq_along(x)
+
+  sample(letters, n = 100, replace = TRUE)
+  sample(letters, n = 10,  replace = FALSE)
+
+  rnorm(10,    0, 1) %>% qplot()
+  rnorm(10000, 0, 1) %>% qplot()
+
+  d <- data_frame(A = sample(c(0:9), size = 100, replace = TRUE),
+                  B = sample(c(0:9), size = 100, replace = TRUE),
+                  C = sample(c(0:9), size = 100, replace = TRUE),
+                  D = sample(c(0:9), size = 100, replace = TRUE))
+
+  d$total <- rowSums(d[c(1:4)])
+  d$mean  <- d$total / 4
+  d$mean2 <- rowMeans(d[c(1:4)])
+
+  ggplot(d, aes(x = mean, y = mean2)) + geom_point()
+
+  x <- c(c(1:10000), rep(c(1, 2, 3), each = 2), c(100001:10000000))
+  x[duplicated(x)]
+
+  x <- c(c(1:10), rep(c(1, 2, 3), each = 2))
+  x[unique(x)]
+  length(x) - length(unique(x))
+
+
+
+# Tidy data
+
+# Manipulating data frames
+
+  data <- data[, unlist(lapply(data, function(x) !all(is.na(x))))] # blank cols
+  data <- data[rowSums(is.na(data)) != ncol(data),] # Remove blank rows
