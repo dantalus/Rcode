@@ -1,0 +1,348 @@
+---
+title: "fastform"
+output: html_document
+---
+
+```{r, echo = FALSE, include = FALSE}
+
+  knitr::opts_chunk$set(warning = FALSE)
+  knitr::opts_chunk$set(message = FALSE)
+  knitr::opts_chunk$set(echo = FALSE)
+
+
+  source("scripts/functions.R")
+
+# Data ####
+
+  source("scripts/data.R")
+
+# Variables ####
+
+  source("scripts/variables.R")
+
+# Long datasets
+
+  source("scripts/long.data.R")
+  
+```
+
+### Fastform
+
+## Bone healing
+
+Study arm is not associated with the the status of the break at the end of the study.
+
+```{r, include = FALSE}
+
+  a <- with(data, table(outcome.final, arm,
+                   dnn = c("Outcome", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+We can recode unknown outcomes as optimistic (everyone with an undetermined outcome evantually healed), pessimistic (they didn't heal). Either way, there is no difference between the groups. 
+
+### Optimistic
+```{r, include = FALSE}
+
+  a <- with(data, table(outcome.op, arm,
+                   dnn = c("Outcome", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+### Pessimistic
+```{r, include = FALSE}
+
+  a <- with(data, table(outcome.pes, arm,
+                   dnn = c("Outcome", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+For other outcomes measured at 2 time points, there aren't enough observations at the end of the study to conduct any statistical tests. 
+
+### Odour
+
+No difference.
+
+```{r, include = FALSE}
+
+  a <- with(data, table(odour.early, arm,
+                   dnn = c("Odour (Early)", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+Among those with previous cast experience. 
+
+```{r, include = FALSE}
+
+  a <- with(data[data$previous.cast.here.early == "yes", ],
+            table(odour.early, arm,
+            dnn = c("Odour (Early)", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+
+### Comfort
+
+No difference.
+
+```{r, include = FALSE}
+
+  a <- with(data, table(comfort.early, arm,
+                   dnn = c("Comfort (Early)", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+Among those with previous cast experience. 
+
+```{r, include = FALSE}
+
+  a <- with(data[data$previous.cast.here.early == "yes", ],
+            table(comfort.early, arm,
+            dnn = c("Comfort (Early)", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+
+### Waterproof rating
+
+A clear difference favoring Fastform
+
+```{r, include = FALSE}
+
+  a <- with(data, table(waterproof.rate.early, arm,
+                   dnn = c("Waterproof rating (Early)", "Study Arm"))) 
+ 
+```
+
+
+```{r}
+   CrossTable(a, digits = 2, prop.t = FALSE, prop.chisq = FALSE,
+                 chisq = TRUE, fisher = TRUE) 
+```
+
+
+## Quick Dash total scores
+
+No differences.
+
+```{r}
+
+  select(quick.dash.long, qd, value.qd, arm, time.qd) %>%
+   filter(qd == "qd.score") %>%
+   mutate(time.qd = factor(time.qd, c("mid", "late"))) %>%
+  ggplot(aes(x = value.qd, fill = arm, group = arm)) +
+    geom_bar(color = "black", position = "dodge") +
+    scale_fill_viridis("", discrete = TRUE) +
+    theme_base() +
+    facet_wrap(~arm + time.qd) +
+    xlab("QuickDash score") +
+    ylab("Participants")
+
+```
+
+### Wilcox rank tests
+
+Early - No difference
+```{r}
+  wilcox.test(qd.score.mid ~ arm, data = data)
+
+```
+
+Late - No difference
+```{r}
+  wilcox.test(qd.score.late ~ arm, data = data)
+
+```
+
+### Quickdash items
+
+```{r, include = FALSE}
+
+  qd.comps <- select(data, id, arm, starts_with("qd.")) %>%
+              select(everything(), -matches(".score.")) %>%
+              select(everything(), -matches(".sport.")) %>%
+              select(everything(), -matches(".work."))
+
+  qd.comps[, c(3:24)] <- lapply(qd.comps[, c(3:24)],
+                                function(x) factor(x,
+                                                   c(1:5)))
+```
+
+```{r}
+  filter(qd.comps, arm == "Fastform") %>%
+    select(ends_with("mid")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                                    mid  = viridis(1, begin = 1),
+                                    high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("QuickDash items, Fastform, Week 7/8")
+
+  filter(qd.comps, arm == "Resin") %>%
+    select(ends_with("mid")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                         mid  = viridis(1, begin = 1),
+                         high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("QuickDash items, Resin, Week 7/8")
+
+  filter(qd.comps, arm == "Fastform") %>%
+    select(ends_with("late")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                         mid  = viridis(1, begin = 1),
+                         high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("QuickDash items, Fastform, Week 12/13")
+
+
+
+  filter(qd.comps, arm == "Resin") %>%
+    select(ends_with("late")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                         mid  = viridis(1, begin = 1),
+                         high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("QuickDash items, Resin, Week 12/13")
+```
+
+
+# EQ visual acuity scores
+
+No differences
+```{r}
+
+ select(eq.long, eq, value.eq, arm, time.eq) %>%
+    filter(eq == "eq.visual.acuity.score") %>%
+    mutate(time.eq = factor(time.eq, c("two", "three"))) %>%
+    mutate(value.eq = as.numeric(value.eq)) %>%
+  ggplot(aes(x = value.eq, fill = arm, group = arm)) +
+    geom_bar(color = "black", position = "dodge") +
+    scale_fill_viridis("", discrete = TRUE) +
+    theme_base() +
+    facet_wrap(~arm + time.eq) +
+    xlab("EQ visual aquity score") +
+    ylab("Participants")
+
+```
+
+### Wilcox rank tests
+
+Early - No difference
+
+```{r}
+  wilcox.test(eq.visual.acuity.score.two ~ arm, data = data)
+```
+
+Late - No difference
+
+```{r}
+  wilcox.test(eq.visual.acuity.score.three ~ arm, data = data)
+
+```
+
+### EQ items
+
+```{r, include = FALSE}
+
+
+ eq.comps <- select(data, id, arm, starts_with("eq.")) %>%
+              select(everything(), -matches(".score."))
+```
+
+```{r}
+
+ filter(eq.comps, arm == "Fastform") %>%
+    select(ends_with("two")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                         mid  = viridis(1, begin = 1),
+                         high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("EQ items, Fastform, Week 2") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+  filter(eq.comps, arm == "Resin") %>%
+    select(ends_with("two")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                         mid  = viridis(1, begin = 1),
+                         high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("EQ items, Resin, Week 2") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+  filter(eq.comps, arm == "Fastform") %>%
+    select(ends_with("three")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                         mid  = viridis(1, begin = 1),
+                         high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("EQ items, Fastform, Week 3") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+  filter(eq.comps, arm == "Resin") %>%
+    select(ends_with("three")) %>%
+    likert() %>%
+    plot(type = "heat") +
+    scale_fill_gradient2("Percent", low  = "white",
+                         mid  = viridis(1, begin = 1),
+                         high = viridis(1, begin = .5),
+                         limits = c(0, 100)) +
+    ggtitle("EQ items, Resin, Week 3") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+

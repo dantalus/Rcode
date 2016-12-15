@@ -1,0 +1,167 @@
+---
+title: "survival"
+author: "Darren L Dahly"
+date: "13 December 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+  knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, 
+                        fig.align = "center")
+
+```
+
+
+```{r cars}
+
+  source("scripts/data.R")
+
+  data.sub <- filter(data, cancer.groups %in% cancerlabels[1:4])
+
+  plot.data <- rbind(opcut(filter(data.sub, sex == "Females"),
+                           "ct.to.os.days", "dead",
+                           "skeletal.muscle.area.index") %>%
+                    mutate(sex = "Females (n = 192)") %>%
+                    mutate(rank = dense_rank(-score)),
+                    opcut(filter(data.sub, sex == "Males"),
+                          "ct.to.os.days", "dead",
+                          "skeletal.muscle.area.index") %>%
+                    mutate(sex = "Males (n = 370)") %>%
+                    mutate(rank = dense_rank(-score)))
+  
+  
+
+```
+
+This is a plot of the cutpoint analysis in males and females for cancer groups 1-4. It's a brute-force approach where every possible cutpoint in muscle surface area index is created and then modelled as a predictor of survival time using the Cox PH model. The -2 log likelihoods from each model and the respective cutpoints are plotted. Ideally you would see a clear peak and that would indicate the "best" place to make your cutpoint. 
+
+We can see below that this is pretty clear for the males (for a cutpoint = to 56), but less so for females. For the latter, I've taken the cutpoint value for that small peak in the middle of the range of possible cutpoints. 
+
+```{r pressure, echo=FALSE}
+
+ filter(plot.data, score < 0) %>%
+  ggplot(aes(x = cutval, y = score)) +
+    geom_line(linetype = "dashed", alpha = 0.5) +
+    geom_point(color = "red", alpha = 0.7) +
+    geom_text_repel(data = filter(plot.data, score < 0 & rank < 7),
+               aes(label = round(cutval, 1))) +
+    geom_text_repel(data = filter(plot.data, score < 0 & rank < 60 &
+                                 cutval > 40 & cutval < 55 &
+                                 sex == "Females (n = 192)"),
+                    aes(label = round(cutval, 1)), color = "grey50") +
+    xlim(20, 80) +
+    facet_wrap(~ sex, scales = "free", ncol = 1) +
+    theme_base() +
+    xlab(bquote(Skeletal~Muscle~Area~Index~(cm^{2}/m^{2}))) +
+    ylab("-2 Log Likelihood from the Cox PH model") +
+    ggtitle("Optimal cutpoint analysis",
+            subtitle = "Cancer types 1-4")
+
+```
+
+
+```{r}
+
+  females <- filter(data.sub, sex == "Females")
+
+  females$cut <- females$skeletal.muscle.area.index
+  females$cut[females$skeletal.muscle.area.index < 49.5  &
+              !is.na(females$cut)]  <- 0
+  females$cut[females$skeletal.muscle.area.index >= 49.5 &
+              !is.na(females$cut)] <- 1
+
+  females$cut <- factor(females$cut, labels = c("< 49.5", ">= 49.5"))
+
+  ddist <- datadist(females)
+  options(datadist = "ddist")
+
+  surv.f <- Surv(females$ct.to.os.days, as.numeric(females$dead) - 1)
+
+  m.5 <- cph(surv.f ~ rcs(skeletal.muscle.area.index, 6),
+             data = females)
+  
+
+```
+
+The lack of a clear cutpoint can be seen in the plots below. The first shows the survival as a function of continious skeletal muscle area index from a model where we allow the non-linear relationship to be estimated (with restricted cublic splines). Because the curve goes down and up and then down, it's not really possible to say "this is the point where risk changes."
+
+
+```{r}
+
+ plot(Predict(m.5, skeletal.muscle.area.index))
+
+```
+
+The second plot is just the KM curve for each group based on our "best" cutpoint of 49.5, and again you can see the ambiguity. 
+
+```{r}
+
+  survplot(npsurv(surv.f ~ cut, data = females))
+
+```
+
+```{r}
+
+  males <- filter(data.sub, sex == "Males")
+
+  males$cut <- males$skeletal.muscle.area.index
+  males$cut[males$skeletal.muscle.area.index < 56  &
+                !is.na(males$cut)]  <- 0
+  males$cut[males$skeletal.muscle.area.index >= 56 &
+                !is.na(males$cut)] <- 1
+
+  males$cut <- factor(males$cut, labels = c("< 56", ">= 56"))
+
+  ddist <- datadist(males)
+  options(datadist = "ddist")
+
+  surv.m <- Surv(males$ct.to.os.days, as.numeric(males$dead) - 1)
+
+  m.6 <- cph(surv.m ~ rcs(skeletal.muscle.area.index, 6),
+             data = males)
+
+
+
+  
+
+```
+
+Unlike the females, you can see (if you look hard) how slope of the risk curve becomes steeper at the cutpoint (56).  
+
+```{r}
+
+  plot(Predict(m.6, skeletal.muscle.area.index))
+
+```
+
+And the picture is much clearer here as well. 
+
+```{r}
+
+  survplot(npsurv(surv.m ~ cut, data = males))
+
+
+```
+
+Another thing to consider is how robust these results are to sampling variation. To get a sense of this, I created 100 bootstrap samples (i.e. sampling with replacement) and repeated the optimum cutpoint analysis in each of these samples. Then I plotted the results, where the log likelihood scores were rescaled as % ranks (so the analyses for each sample can all be plotted together). The plot is below. YOu can see that for males, there is a visible peak around 56, indicating the relative number of times those values were among the highest scores. There is not such message in the females. 
+
+```{r}
+
+  load("boot2.RData")
+
+   filter(boot2, score < 0) %>%
+    ggplot(aes(x = cutval, y = pct_rank, group = sample)) +
+    geom_line(alpha = 0.2) +
+    #geom_point(color = "red", alpha = 0.7) +
+    xlim(20, 80) +
+    facet_wrap(~ sex, scales = "free", ncol = 1) +
+    theme_base() +
+    xlab(bquote(Skeletal~Muscle~Area~Index~(cm^{2}/m^{2}))) +
+    ylab("% rank") +
+    ggtitle("Bootstrapped optimal cutpoint analysis",
+            subtitle = "Cancer types 1-4")
+  
+
+```
+

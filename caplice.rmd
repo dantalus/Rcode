@@ -1,0 +1,1859 @@
+---
+title: "Noel Caplice"
+author: "Darren L Dahly"
+date: "4 July 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, 
+                      fig.align="center", width = 70)
+```
+
+
+```{r, include = FALSE}
+ 
+  sumTable <- function(data, var, g1, g2, ...){
+
+    require(dplyr)
+
+    x <- substitute(
+           group_by(data, g1, g2) %>%
+           summarise(n       = sum(!is.na(var)),
+                     mean    = round(mean(  var, na.rm = TRUE), 1),
+                     median  = round(median(var, na.rm = TRUE), 1),
+                     sd      = round(mean(  var, na.rm = TRUE), 1),
+                     min     = round(min(   var, na.rm = TRUE), 1),
+                     max     = round(max(   var, na.rm = TRUE), 1)),
+         list(g1 = as.name(g1),
+              g2 = as.name(g2),
+              var = as.name(var)))
+
+    eval(x)
+  }
+
+# source("scripts/functions.R")
+  source("scripts/data.R")
+
+
+
+
+```
+
+
+
+
+# Primary outcome: LVEF
+
+
+What are the raw (unadjusted) distributions of GLVEF at baseline and 8 weeks 
+across the three study arms.
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "glvef", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  lvef <- select(data, id, arm, time, glvef, any.diabetes)
+  
+  ggplot(lvef, aes(y = glvef, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(lvef, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") +
+    ggtitle(hard.names[4])
+  
+  
+```
+  
+### Density plots. 
+
+Dashed vertical lines are the sample medians, while the solid lines are the sample means.  
+
+```{r}
+
+  ggplot(lvef, aes(x = glvef, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(lvef, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(glvef, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvef, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(glvef, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvef, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(glvef, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(lvef, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(glvef, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab(hard.names[4]) +
+    ylab("Density")
+
+```
+
+### Models
+
+We report : 
+
+1. The crude model, where GLVEF is the dependent variable; and *study arm* is the sole independent variable. (ANOVA)
+
+2. The base model, where GLVEF is the dependent variable; and *study arm*, *baseline GLVEF*, and *baseline diabetes status* are the independent variables. (ANCOVA)
+
+3. The interaction model, which is the base model, with an interaction between *study arm* and *baseline GLVEF* included. This model is just used to test the assumptions of the base model. 
+
+4. (For some outcomes) The base model, adjusted for body surface area.
+
+```{r}
+
+  lvef.w <- spread(lvef, time, glvef)
+
+  names(lvef.w) <- c("id", "arm", "diabetes", "glvef.bl", "glvef.8")
+  
+  lvef.w <- mutate(lvef.w, glvef.bl = glvef.bl - mean(glvef.bl, na.rm = TRUE))
+  
+  lvef.w <- mutate(lvef.w, diabetes = factor(diabetes))
+
+  lm.glvef.crude <- lm(glvef.8 ~ arm, data = lvef.w)
+
+  lm.glvef.base  <- lm(glvef.8 ~ arm + glvef.bl + diabetes, data = lvef.w)
+  
+  lm.glvef.int  <- lm(glvef.8 ~ arm * glvef.bl + diabetes, data = lvef.w)
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.glvef.crude, lm.glvef.base, lm.glvef.int, 
+            type = "html", dep.var.labels = hard.names[4], 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(lvef.w, aes(x = glvef.bl, y = glvef.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+An alternate means of analysis would be the repeat measured anova, though it is generally less powerful than the ANOCA adjusted for the outcome measured at baseline. 
+
+```{r}
+
+  model.glvef.long <- lmer(glvef ~ arm * time + (1|id), data = lvef)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.glvef.long, 
+            type = "html", dep.var.labels = hard.names[4], 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+# Thickening, Seg 13
+
+
+What are the raw (unadjusted) distributions of segment 13 thickening at baseline and 8 weeks across the three study arms.
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "seg13", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  seg13 <- select(data, id, arm, time, seg13, any.diabetes)
+  
+  ggplot(seg13, aes(y = seg13, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(seg13, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") +
+    ggtitle("Seg 13 thickening")
+  
+  
+```
+  
+### Density plots. 
+
+Dashed vertical lines are the sample medians, while the solid lines are the sample means.  
+
+```{r}
+
+  ggplot(seg13, aes(x = seg13, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(seg13, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(seg13, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(seg13, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(seg13, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(seg13, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(seg13, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(seg13, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(seg13, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab("Seg 13 thickening") +
+    ylab("Density")
+
+```
+
+### Models
+
+We report : 
+
+1. The crude model, where seg 13 thickening is the dependent variable; and *study arm* is the sole independent variable. (ANOVA)
+
+2. The base model, where seg 13 thickening is the dependent variable; and *study arm*, *baseline seg 13 thickening*, and *baseline diabetes status* are the independent variables. (ANCOVA)
+
+3. The interaction model, which is the base model, with an interaction between *study arm* and *baseline seg 13 thickening* included. This model is just used to test the assumptions of the base model. 
+
+4. (For some outcomes) The base model, adjusted for body surface area.
+
+```{r}
+
+  seg13.w <- spread(seg13, time, seg13)
+
+  names(seg13.w) <- c("id", "arm", "diabetes", "seg13.bl", "seg13.8")
+  
+  seg13.w <- mutate(seg13.w, seg13.bl = seg13.bl - mean(seg13.bl, na.rm = TRUE))
+  
+  seg13.w <- mutate(seg13.w, diabetes = factor(diabetes))
+
+  lm.seg13.crude <- lm(seg13.8 ~ arm, data = seg13.w)
+
+  lm.seg13.base  <- lm(seg13.8 ~ arm + seg13.bl + diabetes, data = seg13.w)
+  
+  lm.seg13.int  <- lm(seg13.8 ~ arm * seg13.bl + diabetes, data = seg13.w)
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.seg13.crude, lm.seg13.base, lm.seg13.int, 
+            type = "html", dep.var.labels = "Seg 13 thickening", 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(seg13.w, aes(x = seg13.bl, y = seg13.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+An alternate means of analysis would be the repeat measured anova, though it is generally less powerful than the ANOCA adjusted for the outcome measured at baseline. 
+
+```{r}
+
+  model.seg13.long <- lmer(seg13 ~ arm * time + (1|id), data = seg13)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.seg13.long, 
+            type = "html", dep.var.labels = "Seg 13 thickening", 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+# Thickening, Seg 14
+
+
+What are the raw (unadjusted) distributions of segment 14 thickening at baseline and 8 weeks across the three study arms.
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "seg14", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  seg14 <- select(data, id, arm, time, seg14, any.diabetes)
+  
+  ggplot(seg14, aes(y = seg14, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(seg14, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") +
+    ggtitle("Seg 14 thickening")
+  
+  
+```
+  
+### Density plots. 
+
+Dashed vertical lines are the sample medians, while the solid lines are the sample means.  
+
+```{r}
+
+  ggplot(seg14, aes(x = seg14, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(seg14, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(seg14, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(seg14, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(seg14, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(seg14, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(seg14, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(seg14, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(seg14, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab("Seg 14 thickening") +
+    ylab("Density")
+
+```
+
+### Models
+
+We report : 
+
+1. The crude model, where seg 14 thickening is the dependent variable; and *study arm* is the sole independent variable. (ANOVA)
+
+2. The base model, where seg 14 thickening is the dependent variable; and *study arm*, *baseline seg 14 thickening*, and *baseline diabetes status* are the independent variables. (ANCOVA)
+
+3. The interaction model, which is the base model, with an interaction between *study arm* and *baseline seg 14 thickening* included. This model is just used to test the assumptions of the base model. 
+
+4. (For some outcomes) The base model, adjusted for body surface area.
+
+```{r}
+
+  seg14.w <- spread(seg14, time, seg14)
+
+  names(seg14.w) <- c("id", "arm", "diabetes", "seg14.bl", "seg14.8")
+  
+  seg14.w <- mutate(seg14.w, seg14.bl = seg14.bl - mean(seg14.bl, na.rm = TRUE))
+  
+  seg14.w <- mutate(seg14.w, diabetes = factor(diabetes))
+
+  lm.seg14.crude <- lm(seg14.8 ~ arm, data = seg14.w)
+
+  lm.seg14.base  <- lm(seg14.8 ~ arm + seg14.bl + diabetes, data = seg14.w)
+  
+  lm.seg14.int  <- lm(seg14.8 ~ arm * seg14.bl + diabetes, data = seg14.w)
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.seg14.crude, lm.seg14.base, lm.seg14.int, 
+            type = "html", dep.var.labels = "Seg 14 thickening", 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(seg14.w, aes(x = seg14.bl, y = seg14.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+An alternate means of analysis would be the repeat measured anova, though it is generally less powerful than the ANOCA adjusted for the outcome measured at baseline. 
+
+```{r}
+
+  model.seg14.long <- lmer(seg14 ~ arm * time + (1|id), data = seg14)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.seg14.long, 
+            type = "html", dep.var.labels = "Seg 13 thickening", 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+
+# Stroke Volume
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "sv.main", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  sv.main <- select(data, id, arm, time, sv.main , any.diabetes)
+  
+  ggplot(sv.main, aes(y = sv.main, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(sv.main, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle("SV")
+  
+  
+```
+  
+### Density plots. 
+
+
+```{r}
+
+  ggplot(sv.main, aes(x = sv.main, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(sv.main, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(sv.main, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(sv.main, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(sv.main, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(sv.main, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(sv.main, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(sv.main, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(sv.main, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab("SV") +
+    ylab("Density")
+
+```
+
+### Models
+
+```{r}
+
+  sv.main.w <- spread(sv.main, time, sv.main)
+
+  names(sv.main.w) <- c("id", "arm", "diabetes", "sv.main.bl", "sv.main.8") 
+  
+  sv.main.w <- mutate(sv.main.w, sv.main.bl = sv.main.bl - mean(sv.main.bl, 
+                                                            na.rm = TRUE))
+
+  
+  sv.main.w <- mutate(sv.main.w, diabetes = factor(diabetes))
+
+  lm.sv.main.crude <- lm(sv.main.8 ~ arm, data = sv.main.w)
+
+  lm.sv.main.base  <- lm(sv.main.8 ~ arm + sv.main.bl + diabetes, data = sv.main.w)
+  
+  lm.sv.main.int  <- lm(sv.main.8 ~ arm * sv.main.bl + diabetes, data = sv.main.w)
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.sv.main.crude, lm.sv.main.base, lm.sv.main.int, 
+            type = "html", dep.var.labels = "SV", 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(sv.main.w, aes(x = sv.main.bl, y = sv.main.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+```{r}
+
+  model.sv.main.long <- lmer(sv.main ~ arm * time + (1|id), data = sv.main)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.sv.main.long, 
+            type = "html", dep.var.labels = "SV", 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+
+# Late CE
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "latece", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  latece <- select(data, id, arm, time, latece , any.diabetes)
+  
+  ggplot(latece, aes(y = latece, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(latece, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle(hard.names[5])
+  
+  
+```
+  
+### Density plots. 
+
+
+```{r}
+
+  ggplot(latece, aes(x = latece, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(latece, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(latece, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(latece, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(latece, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(latece, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(latece, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(latece, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(latece, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab(hard.names[5]) +
+    ylab("Density")
+
+```
+
+### Models
+
+```{r}
+
+  latece.w <- spread(latece, time, latece)
+
+  names(latece.w) <- c("id", "arm", "diabetes", "latece.bl", "latece.8") 
+  
+  latece.w <- mutate(latece.w, latece.bl = latece.bl - mean(latece.bl, 
+                                                            na.rm = TRUE))
+
+  
+  latece.w <- mutate(latece.w, diabetes = factor(diabetes))
+
+  lm.latece.crude <- lm(latece.8 ~ arm, data = latece.w)
+
+  lm.latece.base  <- lm(latece.8 ~ arm + latece.bl + diabetes, data = latece.w)
+  
+  lm.latece.int  <- lm(latece.8 ~ arm * latece.bl + diabetes, data = latece.w)
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.latece.crude, lm.latece.base, lm.latece.int, 
+            type = "html", dep.var.labels = hard.names[5], 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(latece.w, aes(x = latece.bl, y = latece.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+```{r}
+
+  model.latece.long <- lmer(latece ~ arm * time + (1|id), data = latece)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.latece.long, 
+            type = "html", dep.var.labels = hard.names[5], 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+# LV Mass
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "lvmass.a", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  lvmass.a <- select(data, id, arm, time, lvmass.a , any.diabetes)
+  
+  ggplot(lvmass.a, aes(y = lvmass.a, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(lvmass.a, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle(hard.names[6])
+  
+  
+```
+  
+### Density plots. 
+
+
+```{r}
+
+  ggplot(lvmass.a, aes(x = lvmass.a, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(lvmass.a, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(lvmass.a, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvmass.a, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(lvmass.a, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvmass.a, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(lvmass.a, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(lvmass.a, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(lvmass.a, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab(hard.names[6]) +
+    ylab("Density")
+
+```
+
+### Models
+
+```{r}
+
+  lvmass.a.w <- spread(lvmass.a, time, lvmass.a)
+
+  names(lvmass.a.w) <- c("id", "arm", "diabetes", "lvmass.a.bl", "lvmass.a.8") 
+  
+  lvmass.a.w <- mutate(lvmass.a.w, lvmass.a.bl = lvmass.a.bl - 
+                         mean(lvmass.a.bl, na.rm = TRUE))
+
+  lvmass.a.w <- mutate(lvmass.a.w, diabetes = factor(diabetes))
+
+  lm.lvmass.a.crude <- lm(lvmass.a.8 ~ arm, data = lvmass.a.w)
+
+  lm.lvmass.a.base  <- lm(lvmass.a.8 ~ arm + lvmass.a.bl + diabetes, data = lvmass.a.w)
+  
+  lm.lvmass.a.int  <- lm(lvmass.a.8 ~ arm * lvmass.a.bl + diabetes, data = lvmass.a.w)
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.lvmass.a.crude, lm.lvmass.a.base, lm.lvmass.a.int, 
+            type = "html", dep.var.labels = hard.names[6], 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(lvmass.a.w, aes(x = lvmass.a.bl, y = lvmass.a.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+```{r}
+
+  model.lvmass.a.long <- lmer(lvmass.a ~ arm * time + (1|id), data = lvmass.a)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.lvmass.a.long, 
+            type = "html", dep.var.labels = hard.names[6], 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+# Infarct Size
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "inf.size", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  inf.size <- select(data, id, arm, time, inf.size , any.diabetes)
+  
+  ggplot(inf.size, aes(y = inf.size, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(inf.size, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle(hard.names[7])
+  
+  
+```
+  
+### Density plots. 
+
+```{r}
+
+  ggplot(inf.size, aes(x = inf.size, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(inf.size, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(inf.size, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(inf.size, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(inf.size, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(inf.size, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(inf.size, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(inf.size, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(inf.size, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab(hard.names[7]) +
+    ylab("Density")
+
+```
+
+### Models
+
+
+```{r}
+
+  inf.size.w <- spread(inf.size, time, inf.size)
+
+  names(inf.size.w) <- c("id", "arm", "diabetes", "inf.size.bl", "inf.size.8") 
+  
+  inf.size.w <- mutate(inf.size.w, inf.size.bl = inf.size.bl - 
+                         mean(inf.size.bl, na.rm = TRUE))
+  
+  inf.size.w <- mutate(inf.size.w, diabetes = factor(diabetes))
+
+  lm.inf.size.crude <- lm(inf.size.8 ~ arm, data = inf.size.w)
+
+  lm.inf.size.base  <- lm(inf.size.8 ~ arm + inf.size.bl + diabetes, data = inf.size.w)
+  
+  lm.inf.size.int  <- lm(inf.size.8 ~ arm * inf.size.bl + diabetes, data = inf.size.w)
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.inf.size.crude, lm.inf.size.base, lm.inf.size.int, 
+            type = "html", dep.var.labels = hard.names[7], 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(inf.size.w, aes(x = inf.size.bl, y = inf.size.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+```{r}
+
+  model.inf.size.long <- lmer(inf.size ~ arm * time + (1|id), data = inf.size)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.inf.size.long, 
+            type = "html", dep.var.labels = hard.names[7], 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+# LVEDV (ml) 
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "lvedv", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  lvedv <- select(data, id, arm, time, lvedv , any.diabetes, bsa.m2)
+  
+  ggplot(lvedv, aes(y = lvedv, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(lvedv, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle(hard.names[11])
+  
+  
+```
+  
+### Density plots. 
+
+```{r}
+
+  ggplot(lvedv, aes(x = lvedv, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(lvedv, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(lvedv, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvedv, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(lvedv, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvedv, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(lvedv, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(lvedv, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(lvedv, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab(hard.names[11]) +
+    ylab("Density")
+
+```
+
+### Models
+
+
+```{r}
+
+  lvedv.w <- spread(lvedv, time, lvedv)
+
+  names(lvedv.w) <- c("id", "arm", "diabetes", "bsa.m2", "lvedv.bl",      
+                       "lvedv.8") 
+  
+  lvedv.w <- mutate(lvedv.w, lvedv.bl = lvedv.bl - 
+                         mean(lvedv.bl, na.rm = TRUE))
+  
+  lvedv.w <- mutate(lvedv.w, diabetes = factor(diabetes))
+
+  lm.lvedv.crude <- lm(lvedv.8 ~ arm, data = lvedv.w)
+
+  lm.lvedv.base  <- lm(lvedv.8 ~ arm + lvedv.bl + diabetes, data = lvedv.w)
+  
+  lm.lvedv.int  <- lm(lvedv.8 ~ arm * lvedv.bl + diabetes, data = lvedv.w)
+
+  lm.lvedv.bsa  <- lm(lvedv.8 ~ arm + lvedv.bl + diabetes + bsa.m2, 
+                      data = lvedv.w)
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.lvedv.crude, lm.lvedv.base, lm.lvedv.int, lm.lvedv.bsa,
+            type = "html", dep.var.labels = hard.names[11], 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(lvedv.w, aes(x = lvedv.bl, y = lvedv.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+```{r}
+
+  model.lvedv.long     <- lmer(lvedv ~ arm * time + (1|id), data = lvedv)
+  model.lvedv.long.bsa <- lmer(lvedv ~ arm * time + bsa.m2 + (1|id), 
+                               data = lvedv)
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.lvedv.long, model.lvedv.long.bsa,
+            type = "html", dep.var.labels = hard.names[11], 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+# LVESV (ml) 
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "lvesv", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  lvesv <- select(data, id, arm, time, lvesv, any.diabetes, bsa.m2)
+  
+  ggplot(lvesv, aes(y = lvesv, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(lvesv, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle(hard.names[12])
+  
+  
+```
+  
+### Density plots. 
+
+```{r}
+
+  ggplot(lvesv, aes(x = lvesv, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(lvesv, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(lvesv, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvesv, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(lvesv, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvesv, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(lvesv, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(lvesv, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(lvesv, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab(hard.names[12]) +
+    ylab("Density")
+
+```
+
+### Models
+
+
+```{r}
+
+  lvesv.w <- spread(lvesv, time, lvesv)
+
+  names(lvesv.w) <- c("id", "arm", "diabetes", "bsa.m2", "lvesv.bl", "lvesv.8") 
+  
+  lvesv.w <- mutate(lvesv.w, lvesv.bl = lvesv.bl - 
+                         mean(lvesv.bl, na.rm = TRUE))
+  
+  lvesv.w <- mutate(lvesv.w, diabetes = factor(diabetes))
+
+  lm.lvesv.crude <- lm(lvesv.8 ~ arm, data = lvesv.w)
+
+  lm.lvesv.base  <- lm(lvesv.8 ~ arm + lvesv.bl + diabetes, data = lvesv.w)
+  
+  lm.lvesv.int  <- lm(lvesv.8 ~ arm * lvesv.bl + diabetes, data = lvesv.w)
+  
+  lm.lvesv.bsa  <- lm(lvesv.8 ~ arm + lvesv.bl + diabetes + bsa.m2, 
+                      data = lvesv.w)
+
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.lvesv.crude, lm.lvesv.base, lm.lvesv.int, lm.lvesv.bsa,
+            type = "html", dep.var.labels = hard.names[12], 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(lvesv.w, aes(x = lvesv.bl, y = lvesv.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+```{r}
+
+  model.lvesv.long     <- lmer(lvesv ~ arm * time + (1|id), data = lvesv)
+  model.lvesv.long.bsa <- lmer(lvesv ~ arm * time + bsa.m2 + (1|id), 
+                               data = lvesv)
+
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.lvesv.long, model.lvesv.long.bsa,
+            type = "html", dep.var.labels = hard.names[12], 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+# LV Mass ED
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "lv.mass.ed", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  lvmed <- select(data, id, arm, time, lv.mass.ed, any.diabetes, bsa.m2)
+  
+  ggplot(lvmed, aes(y = lv.mass.ed, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(lvmed, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle("LV Mass ED")
+  
+  
+```
+  
+### Density plots. 
+
+```{r}
+
+  ggplot(lvmed, aes(x = lv.mass.ed, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(lvmed, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(lv.mass.ed, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvmed, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(lv.mass.ed, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvmed, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(lv.mass.ed, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(lvmed, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(lv.mass.ed, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab("LV Mass ED") +
+    ylab("Density")
+
+```
+
+### Models
+
+
+```{r}
+
+  lvmed.w <- spread(lvmed, time, lv.mass.ed)
+
+  names(lvmed.w) <- c("id", "arm", "diabetes", "bsa.m2", "lvmed.bl", "lvmed.8")
+  
+  lvmed.w <- mutate(lvmed.w, lvmed.bl = lvmed.bl - 
+                         mean(lvmed.bl, na.rm = TRUE))
+  
+  lvesv.w <- mutate(lvesv.w, diabetes = factor(diabetes))
+
+  lm.lvmed.crude <- lm(lvmed.8 ~ arm, data = lvmed.w)
+
+  lm.lvmed.base  <- lm(lvmed.8 ~ arm + lvmed.bl + diabetes, data = lvmed.w)
+  
+  lm.lvmed.int  <- lm(lvmed.8 ~ arm * lvmed.bl + diabetes, data = lvmed.w)
+  
+  lm.lvmed.bsa  <- lm(lvmed.8 ~ arm + lvmed.bl + diabetes + bsa.m2, 
+                      data = lvmed.w)
+
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.lvmed.crude, lm.lvmed.base, lm.lvmed.int, lm.lvmed.bsa,
+            type = "html", dep.var.labels = "LV Mass ED", 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(lvmed.w, aes(x = lvmed.bl, y = lvmed.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+```{r}
+
+  model.lvmed.long     <- lmer(lv.mass.ed ~ arm * time + (1|id), data = lvmed)
+  model.lvmed.long.bsa <- lmer(lv.mass.ed ~ arm * time + bsa.m2 + (1|id), 
+                               data = lvmed)
+
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.lvmed.long, model.lvmed.long.bsa,
+            type = "html", dep.var.labels = "LV Mass ED", 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+# LV Mass ES
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "lv.mass.es", "arm", "time") %>% pander()
+
+```
+</center>
+
+### Line plots
+
+```{r}
+
+  lvmes <- select(data, id, arm, time, lv.mass.es, any.diabetes, bsa.m2)
+  
+  ggplot(lvmes, aes(y = lv.mass.es, color = arm)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_x_continuous(breaks = c(1, 2),
+                       labels = c("Baseline", "8 weeks")) +
+    geom_violin(aes(x = as.numeric(time), group = time),
+                color = "grey90", fill = "grey90", width = .5) +
+    geom_line(aes(group = interaction(id, arm),
+                  x = as.numeric(time)),
+              alpha = 0.3, linetype = "dashed") +
+    geom_jitter(aes(group = id, x = as.numeric(time)),
+                size = 2.5, alpha = 0.5, width = 0.05) +
+    geom_smooth(data = group_by(lvmes, arm),
+                aes(x = as.numeric(time)),
+                method = "lm", se = FALSE, size = 1) +
+    scale_color_manual(guide = FALSE,
+                       values = viridis(3, end = 0.8)) +
+    scale_fill_manual(guide = FALSE, values = viridis(3, end = 0.8)) +
+    xlab("") +
+    ylab("") + 
+    ggtitle("LV Mass ES")
+  
+  
+```
+  
+### Density plots. 
+
+```{r}
+
+  ggplot(lvmes, aes(x = lv.mass.es, color = time, fill = time)) +
+    facet_wrap(~ arm) +
+    theme_base() +
+    scale_fill_viridis("", discrete = TRUE, end = 0.5) +
+    scale_color_viridis("", discrete = TRUE, end = 0.5) +
+    geom_bkde(alpha = 0.5) +
+    geom_rug(size = 0.5, alpha = 0.8) +
+    geom_vline(data = group_by(lvmes, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(median = median(lv.mass.es, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, end = 0),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvmes, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(median = median(lv.mass.es, na.rm = TRUE)),
+               aes(xintercept = median),
+               color = viridis(1, begin = 0.5),
+               linetype = "dashed") +
+    geom_vline(data = group_by(lvmes, arm) %>%
+                 filter(time == "Baseline") %>%
+                 summarise(mean = mean(lv.mass.es, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, end = 0)) +
+    geom_vline(data = group_by(lvmes, arm) %>%
+                 filter(time == "8 weeks") %>%
+                 summarise(mean = mean(lv.mass.es, na.rm = TRUE)),
+               aes(xintercept = mean),
+               color = viridis(1, begin = 0.5)) +
+    xlab("LV Mass ES") +
+    ylab("Density")
+
+```
+
+### Models
+
+
+```{r}
+
+  lvmes.w <- spread(lvmes, time, lv.mass.es)
+
+  names(lvmes.w) <- c("id", "arm", "diabetes", "bsa.m2", "lvmes.bl", "lvmes.8")
+  
+  lvmes.w <- mutate(lvmes.w, lvmes.bl = lvmes.bl - 
+                         mean(lvmes.bl, na.rm = TRUE))
+  
+  
+  lvesv.w <- mutate(lvesv.w, diabetes = factor(diabetes))
+
+  lm.lvmes.crude <- lm(lvmes.8 ~ arm, data = lvmes.w)
+
+  lm.lvmes.base  <- lm(lvmes.8 ~ arm + lvmes.bl + diabetes, data = lvmes.w)
+  
+  lm.lvmes.int  <- lm(lvmes.8 ~ arm * lvmes.bl + diabetes, data = lvmes.w)
+  
+  lm.lvmes.bsa  <- lm(lvmes.8 ~ arm + lvmes.bl + diabetes + bsa.m2, 
+                      data = lvmes.w)
+
+
+
+```
+
+<center>
+```{r, results= "asis"}
+
+  stargazer(lm.lvmes.crude, lm.lvmes.base, lm.lvmes.int, lm.lvmes.bsa,
+            type = "html", dep.var.labels = "LV Mass ES", 
+            ci = TRUE, report = "vc*sp")
+
+
+```
+</center>
+
+### A plot of model 3. 
+
+```{r}
+
+  ggplot(lvmes.w, aes(x = lvmes.bl, y = lvmes.8, color = arm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    theme_base() +
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+### Repeat measures ANOVA (mixed model)
+
+```{r}
+
+  model.lvmes.long     <- lmer(lv.mass.es ~ arm * time + (1|id), data = lvmes)
+  model.lvmes.long.bsa <- lmer(lv.mass.es ~ arm * time + bsa.m2 + (1|id), 
+                               data = lvmes)
+
+
+```
+
+<center>
+```{r, results = "asis"}
+
+  stargazer(model.lvmes.long, model.lvmes.long.bsa,
+            type = "html", dep.var.labels = "LV Mass ES", 
+            ci = TRUE, report = "vc*sp")
+
+```
+</center>
+
+
+# Ventricular Edema (g)
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "v.edema", "arm", "time") %>% pander()
+
+```
+</center>
+
+# Area at Risk (%)
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "atrisk", "arm", "time") %>% pander()
+
+```
+</center>
+
+
+# MSI (A)
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "msi.a", "arm", "time") %>% pander()
+
+```
+</center>
+
+# MSI (B)
+
+### Summary
+
+<center>
+```{r}
+
+  sumTable(data, "msi.b", "arm", "time") %>% pander()
+
+```
+</center>
+
+
+# APPENDIX 1
+
+Distributions of covariates
+
+# APPENDIX 2
+
+Regression diagnostics
+
+### GLVEF base model
+
+```{r}
+
+  plot(lm.glvef.base)
+
+```
+
+### Late CE base model
+
+```{r}
+
+  plot(lm.latece.base)
+
+```
+
+
+### LV mass base model
+
+```{r}
+
+  plot(lm.lvmass.a.base)
+
+```
+
+
+### Infarct size base model
+
+```{r}
+
+  plot(lm.inf.size.base)
+
+```
+
+
+
+### LVEDV (ml)  base model
+
+```{r}
+
+  plot(lm.lvedv.base)
+
+```
+
+
+
+
+### LVESV (ml)  base model
+
+```{r}
+
+  plot(lm.lvesv.base)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

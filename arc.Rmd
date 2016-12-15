@@ -1,0 +1,317 @@
+---
+title: "ARC FDA Application"
+output: word_document
+---
+
+```{r setup, include = FALSE}
+
+  knitr::opts_chunk$set(echo = FALSE)
+
+  source("scripts/packages.R")
+  source("scripts/functions.R")
+  source("scripts/data.R")
+  source("scripts/clean.variables.R")
+
+```
+
+## Clinical Accuracy Validation FDA 201.102
+
+The disclosure of clinical accuracy validation of a thermometer under test (TUT) against a reference clinical thermometer (RCT) should include its *clinical bias* ($\Delta_{cb}$), its *limits of agreement* ($L_A$), and its *clinical repeatability* ($\sigma_r$). 
+
+This validation should be carried out in each of the following applicable age groups:
+
+**Group A** - 0 up to one year (**subgroup A1**: 0 up to three months, and **subgroup A2**: 3 months up to one year)
+
+**Group B** - older than one and younger than five years
+
+**Group C** - older than five years. 
+
+Any group should include at least 35 subjects, with at least 15 subjects in any subgroup. Each age group should contain between 30% and 50% febrile subjects. The total sample across all groups should include a minimum of 105 subjects.  
+
+
+## Patient characteristics
+
+**How many patients were recruited in each age group, and what proportion of these were febrile?** 
+```{r}
+
+  df.1 <- group_by(base.1, age_cat) %>%
+          summarise(n = n(),
+                    p.febrile   = round((table(febrile)[1] / n), 2) * 100) %>%
+          mutate(age_cat = levels(age_cat)) 
+
+  t.1 <- with(base.1, table(age_cat, febrile)) 
+          
+```
+There were a total of `r sum(df.1$n)` patients recruited into the sample. 
+
+We recruited `r df.1$n[1]` patients in the `r df.1$age_cat[1]` age subgroup, and `r df.1$p.febrile[1]`% of these were febrile (n = `r t.1[1]`). 
+
+We recruited `r df.1$n[2]` patients in the `r df.1$age_cat[2]` age subgroup, and `r df.1$p.febrile[2]`% of these were febrile (n = `r t.1[2]`).
+
+In the combined 0 to 1y age group, we have `r t.1[2] + t.1[1]`/ `r df.1$n[1] + df.1$n[2]` febrile patients (`r round((t.1[2] + t.1[1])/ (df.1$n[1] + df.1$n[2]) * 100, 1)`%).
+
+We recruited `r df.1$n[3]` patients in the `r df.1$age_cat[3]` age group, and `r df.1$p.febrile[3]`% of these were febrile (n = `r t.1[3]`). 
+
+We recruited `r df.1$n[4]` patients in the `r df.1$age_cat[4]` age group, and `r df.1$p.febrile[4]`% of these were febrile (n = `r t.1[4]`). 
+
+
+## Clinical bias
+
+The clinical bias is the difference in the first TUT measurement and the first RCT measurement, averaged across all subjects for each age group. 
+
+$$\Delta_{cb} = \frac{\sum_{i=1}^n ^{t}TUT_i - ^{t}RCT_i}{n}$$ 
+
+where *i* is the index number for each subject, *n* is the total number of subjects in the age group, and $^{t}TUT$ and $^{t}RCT$ are the first output measurements taken with the TUT and RCT. 
+
+```{r}
+
+  df.2 <-  mutate(base.1, diff = (insta.temp.1 - waoral.temp.1)) %>%
+           group_by(age_cat) %>%
+           summarise(n         = n(),
+                     miss      = sum(is.na(diff)),
+                     clin.bias = round(mean(diff, na.rm = TRUE), 2)) %>%
+          mutate(age_cat = levels(age_cat)) 
+
+
+
+ df.3 <- mutate(base.1, diff = (insta.temp.1 - cov.temp.1)) %>%
+         group_by(age_cat) %>%
+         summarise(n = n(),
+                   miss = sum(is.na(diff)),
+                   clin.bias = round(mean(diff, na.rm = TRUE), 2)) %>%
+          mutate(age_cat = levels(age_cat)) 
+
+```
+
+Welch Allyn measurements were only taken in the 5+y age group. The clinical bias for the InstaTemp compared with the Welch Allyn in this age group was `r df.2$clin.bias[4]` &deg;C. 
+
+Covidian measurements were collected for all four age groups. The clinical bias for the InstaTemp compared with the Covidian in each age group was as follows:
+
+`r df.3$age_cat[1]`: `r df.3$clin.bias[1]` &deg;C.
+
+`r df.3$age_cat[2]`: `r df.3$clin.bias[2]` &deg;C.
+
+`r df.3$age_cat[3]`: `r df.3$clin.bias[3]` &deg;C.
+
+`r df.3$age_cat[4]`: `r df.3$clin.bias[4]` &deg;C.
+
+
+
+## Limits of agreement
+
+The limits of agreement are calculated as two times the standard deviation of $\Delta_{cb}$ for each age group.
+
+$$L_A = 2 \times \sigma_{\Delta_{cb}}$$, where $\sigma_{\Delta_{cb}}$ is calculated as
+
+$$\sigma_{\Delta_{cb}} = \sqrt{\frac{\sum_{i=1}^n [(^{t}TUT_i - ^{t}RCT_i) - \Delta_{cb}]^2  }{n-1}} $$
+
+```{r}
+
+ df.4 <- mutate(base.1, clin.bias = df.2$clin.bias[4]) %>% 
+         mutate(diff = (insta.temp.1 - waoral.temp.1)) %>%
+         mutate(sq.diff = (diff - clin.bias)^2) %>%
+         group_by(age_cat) %>%
+         summarise(n         = n(),
+                   miss      = sum(is.na(diff)),
+                   lim.agree = round(2 * (sqrt(sum(sq.diff, na.rm = TRUE) / 
+                                              (n - 1))), 2))
+              
+```              
+
+Welch Allyn measurements were only taken in the 5+y age group. The limits of agreement for the InstaTemp compared with the Welch Allyn in this age group was `r df.4$lim.agree[4]` &deg;C. 
+
+The Bland-Altman plot for the InstaTemp vs. the Welch Allyn thermometer is given below. 
+
+```{r}
+
+  library(BlandAltmanLeh)
+
+  ba.data <- filter(base.1, age_cat == "5+y")
+
+
+```
+
+```{r, include = TRUE, fig.width = 4, fig.height = 4}
+
+  bland.altman.plot(ba.data$insta.temp.1, ba.data$waoral.temp.1,
+                    two = 1.96, mode = 1,
+                    graph.sys = "ggplot2", conf.int = 0, silent = FALSE,
+                    sunflower = FALSE,
+                    geom_count = FALSE) +
+    theme_base() +
+    theme(panel.border = element_blank()) +
+    ylab("Difference") +
+    xlab("Mean")
+
+
+```
+
+
+```{r}
+
+   df.5 <- mutate(base.1, clin.bias = df.3$clin.bias[1]) %>% 
+           mutate(diff = (insta.temp.1 - cov.temp.1)) %>%
+           mutate(sq.diff = (diff - clin.bias)^2) %>%
+           group_by(age_cat) %>%
+           summarise(n         = n(),
+                     miss      = sum(is.na(diff)),
+                     lim.agree = round(2 * (sqrt(sum(sq.diff, na.rm = TRUE) / 
+                                                (n - 1))), 2))
+
+   df.6 <- mutate(base.1, clin.bias = df.3$clin.bias[2]) %>% 
+           mutate(diff = (insta.temp.1 - cov.temp.1)) %>%
+           mutate(sq.diff = (diff - clin.bias)^2) %>%
+           group_by(age_cat) %>%
+           summarise(n         = n(),
+                     miss      = sum(is.na(diff)),
+                     lim.agree = round(2 * (sqrt(sum(sq.diff, na.rm = TRUE) / 
+                                                (n - 1))), 2))
+   
+   df.7 <- mutate(base.1, clin.bias = df.3$clin.bias[3]) %>% 
+           mutate(diff = (insta.temp.1 - cov.temp.1)) %>%
+           mutate(sq.diff = (diff - clin.bias)^2) %>%
+           group_by(age_cat) %>%
+           summarise(n         = n(),
+                     miss      = sum(is.na(diff)),
+                     lim.agree = round(2 * (sqrt(sum(sq.diff, na.rm = TRUE) /
+                                                (n - 1))), 2))
+  
+   df.8 <- mutate(base.1, clin.bias = df.3$clin.bias[4]) %>% 
+           mutate(diff = (insta.temp.1 - cov.temp.1)) %>%
+           mutate(sq.diff = (diff - clin.bias)^2) %>%
+           group_by(age_cat) %>%
+           summarise(n         = n(),
+                     miss      = sum(is.na(diff)),
+                     lim.agree = round(2 * (sqrt(sum(sq.diff, na.rm = TRUE) / 
+                                                (n - 1))), 2))
+        
+
+```
+
+Covidian measurements were collected for all four age groups. The limits of agreement for the InstaTemp compared with the Covidian in each age group was as follows:
+
+`r df.3$age_cat[1]`: `r df.5$lim.agree[1]` &deg;C.
+
+`r df.3$age_cat[2]`: `r df.6$lim.agree[2]` &deg;C.
+
+`r df.3$age_cat[3]`: `r df.7$lim.agree[3]` &deg;C.
+
+`r df.3$age_cat[4]`: `r df.8$lim.agree[4]` &deg;C.
+
+## Clinical Repeatability
+
+Clinical repeatability is calcuated for all subjects, across all age groups, with febrile subjects under the age of 5-years excluded. It is calcuated as the pooled standard deviation of triplicate measurements of the TUT. The standard deviation for each subject, $\sigma_j$, is calculated as follows:
+
+$$\sigma_j = \sqrt{\frac{\sum_{i=1}^m{(^{t}TUT_i - \bar{^{t}TUT_j)}}}{m - 1}}$$
+
+where $\bar{^{t}TUT_j}$ is the average of all measurements for subject *j*, and *m* is the number of measurements for the subject. The standard deviations are then pooled across all subjects as follows:
+
+$$\sigma_r = \sqrt{\frac{\sum_{j=1}^N{\sigma^{2}_j}}{N}}$$
+
+where *N* is the total number of subjects across all age groups. 
+
+
+```{r}
+
+
+  df.9 <- round(filter(base.1, age_cat == "5+y" |
+                              (age_cat == "0 to 3m"  & febrile == "No") |
+                              (age_cat == "3m to 1y" & febrile == "No") |
+                              (age_cat == "1 to 5y"  & febrile == "No")) %>%
+                select(id, starts_with("insta.temp")) %>%
+                   mutate(mean.insta = (insta.temp.1 + insta.temp.2 + 
+                                          insta.temp.3) / 3) %>%
+                   mutate(sq.diff.1 = (insta.temp.1 - mean.insta)^2) %>%
+                   mutate(sq.diff.2 = (insta.temp.2 - mean.insta)^2) %>%
+                   mutate(sq.diff.3 = (insta.temp.3 - mean.insta)^2) %>%
+                   mutate(sum.sq.diff = sq.diff.1 + sq.diff.2 + sq.diff.3) %>%
+                   mutate(msq.diff = sum.sq.diff / 2) %>%
+                   mutate(sigma.j = sqrt(msq.diff)) %>%
+                   mutate(var.j = sigma.j^2) %>%
+                   summarise(clin.rep = sqrt(mean(var.j, na.rm = TRUE))), 2) 
+
+ df.10 <- round(filter(base.1, age_cat == "5+y" |
+                              (age_cat == "0 to 3m"  & febrile == "No") |
+                              (age_cat == "3m to 1y" & febrile == "No") |
+                              (age_cat == "1 to 5y"  & febrile == "No")) %>%
+                select(id, starts_with("waoral")) %>%
+                   mutate(mean.waoral = (waoral.temp.1 + waoral.temp.2 + 
+                                          waoral.temp.3) / 3) %>%
+                   mutate(sq.diff.1 = (waoral.temp.1 - mean.waoral)^2) %>%
+                   mutate(sq.diff.2 = (waoral.temp.2 - mean.waoral)^2) %>%
+                   mutate(sq.diff.3 = (waoral.temp.3 - mean.waoral)^2) %>%
+                   mutate(sum.sq.diff = sq.diff.1 + sq.diff.2 + sq.diff.3) %>%
+                   mutate(msq.diff = sum.sq.diff / 2) %>%
+                   mutate(sigma.j = sqrt(msq.diff)) %>%
+                   mutate(var.j = sigma.j^2) %>%
+                   summarise(clin.rep = sqrt(mean(var.j, na.rm = TRUE))), 2) 
+ 
+  df.11 <- round(filter(base.1, age_cat == "5+y" |
+                              (age_cat == "0 to 3m"  & febrile == "No") |
+                              (age_cat == "3m to 1y" & febrile == "No") |
+                              (age_cat == "1 to 5y"  & febrile == "No")) %>%
+                select(id, starts_with("cov")) %>%
+                   mutate(mean.cov = (cov.temp.1 + cov.temp.2 + 
+                                          cov.temp.3) / 3) %>%
+                   mutate(sq.diff.1 = (cov.temp.1 - mean.cov)^2) %>%
+                   mutate(sq.diff.2 = (cov.temp.2 - mean.cov)^2) %>%
+                   mutate(sq.diff.3 = (cov.temp.3 - mean.cov)^2) %>%
+                   mutate(sum.sq.diff = sq.diff.1 + sq.diff.2 + sq.diff.3) %>%
+                   mutate(msq.diff = sum.sq.diff / 2) %>%
+                   mutate(sigma.j = sqrt(msq.diff)) %>%
+                   mutate(var.j = sigma.j^2) %>%
+                   summarise(clin.rep = sqrt(mean(var.j, na.rm = TRUE))), 2)
+  
+   df.12 <- round(filter(base.1, age_cat == "5+y" |
+                              (age_cat == "0 to 3m"  & febrile == "No") |
+                              (age_cat == "3m to 1y" & febrile == "No") |
+                              (age_cat == "1 to 5y"  & febrile == "No")) %>%
+                select(id, starts_with("mddc")) %>%
+                   mutate(mean.mddc = (mddc.temp.1 + mddc.temp.2 + 
+                                          mddc.temp.3) / 3) %>%
+                   mutate(sq.diff.1 = (mddc.temp.1 - mean.mddc)^2) %>%
+                   mutate(sq.diff.2 = (mddc.temp.2 - mean.mddc)^2) %>%
+                   mutate(sq.diff.3 = (mddc.temp.3 - mean.mddc)^2) %>%
+                   mutate(sum.sq.diff = sq.diff.1 + sq.diff.2 + sq.diff.3) %>%
+                   mutate(msq.diff = sum.sq.diff / 2) %>%
+                   mutate(sigma.j = sqrt(msq.diff)) %>%
+                   mutate(var.j = sigma.j^2) %>%
+                   summarise(clin.rep = sqrt(mean(var.j, na.rm = TRUE))), 2) 
+
+
+```
+
+
+The clinical repeatability of the InstaTemp in our subject sample, omtting the febrile under-5-year-olds (n = `r t.1[1] + t.1[2] + t.1[3]`), was `r df.9$clin.rep`. 
+
+## Additional analyses
+
+### Covidian vs. Welch Allyn
+```{r}
+
+  df.x <-  mutate(base.1, diff = (cov.temp.1 - waoral.temp.1)) %>%
+           group_by(age_cat) %>%
+           summarise(n         = n(),
+                     miss      = sum(is.na(diff)),
+                     clin.bias = round(mean(diff, na.rm = TRUE), 2)) %>%
+          mutate(age_cat = levels(age_cat)) 
+
+
+ df.y <- mutate(base.1, clin.bias = df.x$clin.bias[4]) %>% 
+         mutate(diff = (cov.temp.1  - waoral.temp.1)) %>%
+         mutate(sq.diff = (diff - clin.bias)^2) %>%
+         group_by(age_cat) %>%
+         summarise(n         = n(),
+                   miss      = sum(is.na(diff)),
+                   lim.agree = round(2 * (sqrt(sum(sq.diff, na.rm = TRUE) / 
+                                              (n - 1))), 2))
+      
+```
+
+For comparison, we also evaluated the Covidian (as the TUT) vs. the Welch Allyn (RCT) in the 5+y age group. The clinical bias for the Covidian was `r df.x$clin.bias[4]` &deg;C (vs. `r df.2$clin.bias[4]` &deg;C for the InstaTemp), and the limits of agreement was `r df.y$lim.agree[4]` &deg;C (vs. `r df.4$lim.agree[4]` &deg;C. for the InstaTemp).
+
+
+### Clinical repeatability for other thermometers
+
+In comparison, the clinical repeatability in subjects older than 5 years using the Welch Allyn oral thermometer was `r df.10$clin.rep`. The clinical repeatability in the full sample was `r df.11$clin.rep` for the Covidian (vs. `r df.9$clin.rep` for the InstaTemp). 
+
